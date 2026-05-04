@@ -1,3 +1,4 @@
+import random
 import requests
 import os
 from flask import Flask, render_template, request, jsonify
@@ -25,15 +26,42 @@ def run_report():
     selected_members = data.get('members', [])
     start_date = data.get('start_date')
     end_date = data.get('end_date')
-    token = data.get('token')
-
-    # 建議修改
     token = data.get('token') or os.environ.get('JIRA_TOKEN')
 
-    if not token:
+    if not token and not os.environ.get('DEMO_MODE') == 'true':
         return jsonify({"error": "請貼上您的 Jira API Token 或確認環境變數已設定"}), 400
 
     results = []
+    
+    # 檢查是否開啟演示模式
+    is_demo = os.environ.get('DEMO_MODE') == 'true'
+    
+    # 定義 Jira API 網址
+    base_url = os.environ.get('JIRA_URL', 'https://pmo-jira.qyrc452.com')
+    api_url = f"{base_url}/rest/api/2/search"
+    
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+
+    for m in selected_members:
+        if is_demo:
+            # 💡 模擬模式：隨機產生 3 到 15 之間的數字，讓 Demo 畫面看起來很充實
+            count = random.randint(3, 15)
+        else:
+            # 🚀 真實邏輯：連線公司 Jira 抓取數據
+            jql = f'project IN ("QA", "KYOP", "RDC-QA", "API-HCIYL") AND issuetype = "Bug" AND reporter = "{m["id"]}" AND created >= "{start_date}" AND created <= "{end_date}"'
+            params = {"jql": jql, "maxResults": 0}
+            try:
+                resp = requests.get(api_url, headers=headers, params=params, timeout=10)
+                count = resp.json().get("total", 0) if resp.status_code == 200 else 0
+            except:
+                count = 0
+            
+        results.append({"name": m['name'], "count": count})
+
+    return jsonify(results)
     
     # 優先讀取環境變數，若沒設定則使用原本的網址作為預設值
     base_url = os.environ.get('JIRA_URL', 'https://pmo-jira.qyrc452.com')
