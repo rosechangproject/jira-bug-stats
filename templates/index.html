@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <meta charset="UTF-8">
+    <title>🧙‍♂️ QA Team Jira Bug開單數量統計</title>
+    <!-- 💡 標籤必須正確關閉 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<!-- 💡 教學彈出視窗 -->
+<div id="tokenModal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 relative">
+        <button onclick="closeModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+        
+        <h2 class="text-xl font-bold mb-6 flex items-center">
+            <span class="mr-2">🔑</span> 如何獲取 Jira API Token
+        </h2>
+
+        <div class="space-y-8">
+            <div class="border-l-4 border-blue-500 pl-4">
+                <p class="font-bold text-gray-800">Step 1 & 2: 進入個人設定並找到權杖頁面</p>
+                <img src="/static/拿取API token.jpg" class="mt-2 rounded-lg shadow border w-full">
+            </div>
+            <div class="border-l-4 border-blue-500 pl-4">
+                <p class="font-bold text-gray-800">Step 3: 點擊建立新權杖</p>
+                <img src="/static/拿取API token-1.jpg" class="mt-2 rounded-lg shadow border w-full">
+            </div>
+            <div class="border-l-4 border-blue-500 pl-4">
+                <p class="font-bold text-gray-800">Step 4: 設定名稱 (建議 360 天)</p>
+                <img src="/static/拿取API token-2.jpg" class="mt-2 rounded-lg shadow border w-full">
+            </div>
+            <div class="border-l-4 border-blue-500 pl-4">
+                <p class="font-bold text-gray-800">Step 5: 複製代碼並妥善保存</p>
+                <img src="/static/拿取API token-3.jpg" class="mt-2 rounded-lg shadow border w-full">
+            </div>
+        </div>
+
+        <div class="mt-8 text-center">
+            <button onclick="closeModal()" class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700">我了解了</button>
+        </div>
+    </div>
+</div>
+
+<body class="bg-gray-50 p-10">
+    <div class="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-md">
+        <h1 class="text-2xl font-bold mb-6 text-gray-800">🧙‍♂️ QA Team Jira Bug開單數量統計</h1>
+        
+        <!-- Token 輸入區 -->
+    <div class="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-100 relative">
+        <div class="flex justify-between items-center mb-1">
+            <label class="block text-sm font-medium text-blue-800">Jira API Token</label>
+            <!-- 💡 新增：教學連結 -->
+            <a href="javascript:void(0)" onclick="openModal()" class="text-xs text-blue-600 hover:text-blue-800 underline">如何獲取 Token？</a>
+        </div>
+        <input type="password" id="apiToken" class="mt-1 block w-full border rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500" placeholder="請貼上您的 Token">
+        <p class="text-xs text-blue-400 mt-1">* 此 Token 僅供本次查詢，程式不會儲存您的私密資料。</p>
+    </div>
+        
+        <div class="space-y-4">
+            <!-- 成員選擇區 -->
+            <div>
+                <div class="flex justify-between items-center mb-2">
+                    <label class="block text-sm font-medium text-gray-700">選擇成員 (可多選)</label>
+                    <label class="inline-flex items-center text-sm text-blue-600 cursor-pointer hover:text-blue-800">
+                        <input type="checkbox" id="selectAll" class="rounded mr-1" onclick="toggleAll(this)">
+                        <span id="selectAllText">全選</span>
+                    </label>
+                </div>
+                
+                <div class="mt-2 grid grid-cols-3 gap-2 border p-4 rounded-md max-h-40 overflow-y-auto">
+                    {% for m in members %}
+                    <label class="inline-flex items-center">
+                        <input type="checkbox" class="member-checkbox rounded text-blue-600" value="{{ m['Jira ID (爬蟲用的)'] }}" data-name="{{ m['姓名'] }}">
+                        <span class="ml-2 text-sm text-gray-600">{{ m['姓名'] }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- 💡 新增：快捷日期按鈕 -->
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">快速選擇區間</label>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" onclick="quickDate('week')" class="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-full border text-gray-600 transition">最近 7 天</button>
+                    <button type="button" onclick="quickDate('month')" class="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-full border text-gray-600 transition">最近一個月</button>
+                    <button type="button" onclick="quickDate('halfYear')" class="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-full border text-gray-600 transition">最近半年</button>
+                    <button type="button" onclick="quickDate('year')" class="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded-full border text-gray-600 transition">最近一年</button>
+                </div>
+            </div>
+
+            <!-- 日期選擇區 -->
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">開始日期</label>
+                    <input type="date" id="startDate" class="mt-1 block w-full border rounded-md p-2 text-sm" value="2026-01-01">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">結束日期</label>
+                    <input type="date" id="endDate" class="mt-1 block w-full border rounded-md p-2 text-sm">
+                </div>
+            </div>
+
+            <button onclick="runReport()" id="btn" class="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed">
+                開始產出統計資料
+            </button>
+        </div>
+
+        <!-- 狀態與結果 -->
+        <!-- 結果呈現 -->
+        <div id="loading" class="hidden mt-6 text-center text-blue-500 animate-pulse">
+            🚀 正在努力抓取中，請稍候...
+        </div>
+
+        <div id="resultArea" class="hidden mt-8">
+            <!-- 💡 新增：數據概覽卡片 -->
+            <div id="summaryCards" class="grid grid-cols-2 gap-4 mb-8">
+                <div class="bg-blue-50 p-4 rounded-lg border border-blue-100 text-center">
+                    <p class="text-xs text-blue-600 font-medium mb-1">團隊總計 Bug 數</p>
+                    <h3 id="totalBugs" class="text-2xl font-bold text-blue-800">-</h3>
+                </div>
+                <div class="bg-indigo-50 p-4 rounded-lg border border-indigo-100 text-center">
+                    <p class="text-xs text-indigo-600 font-medium mb-1">平均每月開單數 (每人)</p>
+                    <h3 id="avgPerMonth" class="text-2xl font-bold text-indigo-800">-</h3>
+                </div>
+            </div>
+
+            <!-- 💡 新增：匯出 Excel 按鈕 -->
+            <div class="flex justify-end mb-4">
+                <button onclick="exportToExcel()" class="flex items-center px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 transition shadow-sm">
+                    <span class="mr-2">📊</span> 匯出 Excel 報表
+                </button>
+            </div>
+
+            <table id="resultTable" class="w-full border-collapse">
+                <thead>
+                    <tr class="bg-gray-100">
+                        <th class="border p-2 text-left text-gray-700">姓名</th>
+                        <th class="border p-2 text-left text-gray-700">Bug 數量</th>
+                    </tr>
+                </thead>
+                <tbody id="resultBody"></tbody>
+            </table>
+
+            <!-- 💡 清空按鈕放在最下面 -->
+            <div class="mt-8 flex justify-center">
+                <button onclick="clearReport()" class="flex items-center px-4 py-2 text-sm bg-white text-gray-500 border border-gray-300 rounded-md hover:bg-gray-50 transition shadow-sm">
+                    <span>🧹 清空本次產出的資料並回頂部</span>
+                </button>
+            </div>
+        </div>
+
+        <script>
+        // 1. 自動日期設定 (今日)
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date();
+            document.getElementById('endDate').value = today.toISOString().split('T')[0];
+        });
+
+        // 2. 快捷日期功能
+        function quickDate(type) {
+            const end = new Date();
+            let start = new Date();
+            if (type === 'week') start.setDate(end.getDate() - 7);
+            if (type === 'month') start.setMonth(end.getMonth() - 1);
+            if (type === 'halfYear') start.setMonth(end.getMonth() - 6);
+            if (type === 'year') start.setFullYear(end.getFullYear() - 1);
+            
+            document.getElementById('startDate').value = start.toISOString().split('T')[0];
+            document.getElementById('endDate').value = end.toISOString().split('T')[0];
+        }
+
+        // 3. 全選功能
+        function toggleAll(source) {
+            document.querySelectorAll('.member-checkbox').forEach(cb => cb.checked = source.checked);
+            document.getElementById('selectAllText').innerText = source.checked ? '取消全選' : '全選';
+        }
+
+        // 4. 教學彈窗 (Modal)
+        function openModal() { document.getElementById('tokenModal').classList.remove('hidden'); }
+        function closeModal() { document.getElementById('tokenModal').classList.add('hidden'); }
+
+        // 5. 清空功能
+        function clearReport() {
+            document.getElementById('resultArea').classList.add('hidden');
+            document.getElementById('resultBody').innerHTML = '';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // 6. 產出報表核心邏輯
+        async function runReport() {
+            const token = document.getElementById('apiToken').value;
+            if (!token) return alert('請先貼上您的 Jira API Token');
+
+            const btn = document.getElementById('btn');
+            const loading = document.getElementById('loading');
+            const resultArea = document.getElementById('resultArea');
+            const body = document.getElementById('resultBody');
+
+            const selected = Array.from(document.querySelectorAll('.member-checkbox:checked')).map(cb => ({
+                id: cb.value, name: cb.getAttribute('data-name')
+            }));
+            if (selected.length === 0) return alert('請選擇至少一位成員');
+
+            btn.disabled = true;
+            btn.innerText = '⏳ 正在計算數據...';
+            loading.classList.remove('hidden');
+            resultArea.classList.add('hidden');
+
+            try {
+                const response = await fetch('/run_report', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        members: selected,
+                        start_date: document.getElementById('startDate').value,
+                        end_date: document.getElementById('endDate').value,
+                        token: token
+                    })
+                });
+                const results = await response.json();
+
+                // --- 數學運算：計算總數與月平均 ---
+                const totalCount = results.reduce((sum, item) => sum + item.count, 0);
+                const start = new Date(document.getElementById('startDate').value);
+                const end = new Date(document.getElementById('endDate').value);
+                const diffDays = Math.max((end - start) / (1000 * 60 * 60 * 24), 1);
+                const monthFactor = diffDays / 30;
+                const avgMonthly = (totalCount / Math.max(results.length, 1) / Math.max(monthFactor, 0.1)).toFixed(1);
+
+                // 更新卡片數據
+                document.getElementById('totalBugs').innerText = `${totalCount} `;
+                document.getElementById('avgPerMonth').innerText = `${avgMonthly} / 月`;
+
+                // 繪製表格
+                results.sort((a, b) => b.count - a.count);
+                const maxCount = Math.max(...results.map(r => r.count), 1);
+                body.innerHTML = results.map(res => `
+                    <tr class="hover:bg-gray-50 border-b">
+                        <td class="p-3 text-gray-700 font-medium">${res.name}</td>
+                        <td class="p-3"><div class="flex items-center">
+                            <span class="w-12 font-bold text-blue-600">${res.count}</span>
+                            <div class="flex-1 bg-gray-100 rounded-full h-3 ml-2">
+                                <div class="bg-blue-500 h-3 rounded-full" style="width: ${(res.count/maxCount)*100}%"></div>
+                            </div>
+                        </div></td>
+                    </tr>`).join('');
+
+                resultArea.classList.remove('hidden');
+            } catch (e) {
+                alert('抓取失敗，請確認 VPN 或 Token');
+            } finally {
+                btn.disabled = false;
+                btn.innerText = '開始產出報表';
+                loading.classList.add('hidden');
+            }
+        }
+            function exportToExcel() {
+                // 1. 取得必要數據
+                const start = document.getElementById('startDate').value;
+                const end = document.getElementById('endDate').value;
+                const totalBugs = document.getElementById('totalBugs').innerText;
+                const avgPerMonth = document.getElementById('avgPerMonth').innerText;
+                
+                // 2. 準備摘要資料 (二維陣列格式)
+                const summaryData = [
+                    ["Jira Bug 統計報表"],
+                    ["統計區間", `${start} 至 ${end}`],
+                    ["團隊總計 Bug 數", totalBugs],
+                    ["平均每月開單數 (每人)", avgPerMonth],
+                    [], // 空一行，區隔摘要與表格
+                    ["姓名", "Bug 數量"] // 表格標頭
+                ];
+
+                // 3. 取得原本表格中的詳細數據
+                const rows = document.querySelectorAll('#resultBody tr');
+                rows.forEach(row => {
+                    const name = row.cells[0].innerText;
+                    const count = row.cells[1].querySelector('span').innerText;
+                    summaryData.push([name, count]);
+                });
+
+                // 4. 建立工作表
+                const ws = XLSX.utils.aoa_to_sheet(summaryData);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Bug統計摘要");
+
+                // 5. 檔名包含日期區間
+                const fileName = `Jira_Report_${start}_to_${end}.xlsx`;
+                XLSX.writeFile(wb, fileName);
+                
+                console.log("進階報表匯出成功！");
+            }
+    </script>
+</body>
+</html>
