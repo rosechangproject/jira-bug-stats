@@ -1,4 +1,5 @@
 import requests
+import os
 from flask import Flask, render_template, request, jsonify
 import pandas as pd
 
@@ -26,12 +27,17 @@ def run_report():
     end_date = data.get('end_date')
     token = data.get('token')
 
+    # 建議修改
+    token = data.get('token') or os.environ.get('JIRA_TOKEN')
+
     if not token:
-        return jsonify({"error": "請貼上您的 Jira API Token"}), 400
+        return jsonify({"error": "請貼上您的 Jira API Token 或確認環境變數已設定"}), 400
 
     results = []
-    # 💡 這就是妳問的 API 網址
-    api_url = "https://pmo-jira.qyrc452.com/rest/api/2/search"
+    
+    # 優先讀取環境變數，若沒設定則使用原本的網址作為預設值
+    base_url = os.environ.get('JIRA_URL', 'https://pmo-jira.qyrc452.com')
+    api_url = f"{base_url}/rest/api/2/search"
     
     headers = {
         "Authorization": f"Bearer {token}",
@@ -60,5 +66,7 @@ def run_report():
     return jsonify(results)
 
 if __name__ == '__main__':
-    # host 改成 0.0.0.0 讓大家都能連
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Render 會自動分配 PORT，若在本機執行則預設 5000
+    port = int(os.environ.get('PORT', 5000))
+    # 必須設定 host='0.0.0.0'，雲端伺服器才能連結到妳的程式
+    app.run(host='0.0.0.0', port=port)
